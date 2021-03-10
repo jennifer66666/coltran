@@ -125,6 +125,10 @@ class ColTranCore(tf.keras.Model):
     loss = base_utils.nats_to_bits(tf.reduce_sum(loss))
     return loss / (64.0 * 64.0)
 
+  #L87 gray = tf.image.rgb_to_grayscale(inputs)
+  #所以可以合理怀疑inputs是彩图
+  #labels是将inputs二值化+OneHot 因为cross-entropy是处理分类问题的，需要把label搞成分类问题的样子(离散值)
+  #FIXME：这里为什么一定要用CE呢?有没有/为什么不用 其他处理连续值的损失函数?
   def loss(self, targets, logits, train_config, training, aux_output=None):
     """Converts targets to coarse colors and computes log-likelihood."""
     downsample = train_config.get('downsample', False)
@@ -150,7 +154,7 @@ class ColTranCore(tf.keras.Model):
 
     enc_loss = self.image_loss(enc_logits, labels)
     return loss, {'encoder': enc_loss}
-
+#------------------0310----------------------------------
   def get_logits(self, inputs_dict, train_config, training):
     is_downsample = train_config.get('downsample', False)
     downsample_res = train_config.get('downsample_res', 64)
