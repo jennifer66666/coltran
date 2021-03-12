@@ -155,6 +155,7 @@ class ColTranCore(tf.keras.Model):
     enc_loss = self.image_loss(enc_logits, labels)
     return loss, {'encoder': enc_loss}
 #------------------0310----------------------------------
+#设置一些参数来调用call这个函数
   def get_logits(self, inputs_dict, train_config, training):
     is_downsample = train_config.get('downsample', False)
     downsample_res = train_config.get('downsample_res', 64)
@@ -204,7 +205,7 @@ class ColTranCore(tf.keras.Model):
     """
     num_filters = self.config.hidden_size
     batch_size, height, width = z_gray.shape[:3]
-
+    # store for what?
     # channel_cache[i, j] stores the pixel embedding for row i and col j.
     canvas_shape = (batch_size, height, width, num_filters)
     channel_cache = coltran_layers.Cache(canvas_shape=(height, width))

@@ -70,9 +70,14 @@ class GrayScaleEncoder(layers.Layer):
     if len(inputs.shape) == 4:
       if inputs.shape[-1] != 1:
         raise ValueError('Expected inputs is a grayscale image')
+      #Removes dimensions of size 1 from the shape of a tensor.
       grayscale = tf.squeeze(inputs, axis=-1)
+    # output shape (b,w,h,256), 256 onehot
     grayscale = tf.one_hot(grayscale, depth=256)
+    # L66, self.embedding dense 256 to hidden size 
     h_gray = self.embedding(grayscale)
+    # L67 self.encoder=FactorizedAttention
+    # Encodes image into 2-D spatial context with factorized attention layers
     return self.encoder(h_gray)
 
 
@@ -88,6 +93,9 @@ class OuterDecoder(layers.Layer):
   input. Transforms the input X into 2-D spatial context C (H, W, D)
   conditioned on h. Each location C[i, j] is a vector of size D that
   summarizes information from X[:i] and h.
+
+  according to the paper:
+  outer_decoder: h<-ShiftDown(u)+ShiftRight(h)+PositionEmbeddings
 
   The conditional components can be activated by setting the corresponding
   conditional arguments to True.
