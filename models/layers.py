@@ -279,7 +279,8 @@ class DenseND(layers.Layer):
 
 class RelativeAttentionBiasND(layers.Layer):
   """Relative attention bias in nd factorizes over dimensions."""
-
+  # 按照https://arxiv.org/pdf/1803.02155 计算出positional embedding a_ij 
+  # 之后会像bias一样加到e_ij上，所以这里称之为bias
   def __init__(self, lengths, num_heads, **kwargs):
     self.num_heads = num_heads
     self.lengths = lengths
@@ -394,12 +395,18 @@ class ConditionalLayerNorm(layers.Layer):
 class SelfAttentionND(layers.Layer):
   """Transforms input through a N-D self-attention layer.
 
+  paper P5: context representation c in R^{MxNxD}
+  M,N represent the embedded image height and width
+  D represent dimension
+  ??so N-D here could be a row??
+
   Assume key, query and memory tensors are N-D tensors.
 
   1. Project key, query and value tensors into (N+2)-D tensors using
      dense layers where the outer two dimensions are
      [num_heads, num_channels_per_head].
      num_channels_per_head is set to num_channels // num_heads by default.
+     FIXME: so what is N and N+2 on earth?
   2. Computes self-attention tensor using 2 dot products.
      The first computes similarity between the key and query tensors.
      The second uses this similarity to perform a weighted average over
@@ -462,6 +469,7 @@ class SelfAttentionND(layers.Layer):
     self.num_heads = num_heads
     self.hidden_size = hidden_size
 
+    # 只在倒数第三个维度上做attention, 最后两个维度是heads, channels
     # By default, apply attention in third last dimension.
     # Last 2 dimensions are heads, channels.
     self.attention_dim_q = self.attention_dim_k = -3
@@ -480,6 +488,7 @@ class SelfAttentionND(layers.Layer):
       return inputs
     cond_out = layer(cond_inputs)
     if self.cond_scale:
+      # 在最后一个维度上把cond完的结果一分为二，一份做scale，一份做shift
       scale, shift = tf.split(cond_out, num_or_size_splits=2, axis=-1)
       scale = self.cond_act_func(scale)
       shift = self.cond_act_func(shift)
@@ -542,14 +551,17 @@ class SelfAttentionND(layers.Layer):
     super(SelfAttentionND, self).build(input_shape)
 
   def _apply_mask_and_bias(self, alphas):
+    # FIXME: 为啥又整个bias，单独mask不行吗？ relative_attention(None)是啥
     bias = self.relative_attention(None)
     if self.mask:
       bias += self._mask
-
+    # FIXME: 啥意思
     expand_bias_dims = -self.attention_dim_q - 3
     if expand_bias_dims:
       bias = tf.reshape(bias, [-1] + [1] * expand_bias_dims +
                         list(bias.shape[1:]))
+    # mask上三角为极大负数，下三角全0
+    # 所以与mask和相当于所有上三角元素全部失效
     return alphas + bias
 
   def _dot_product(self, q, k, contract_dim_q=-3, contract_dim_k=-3):

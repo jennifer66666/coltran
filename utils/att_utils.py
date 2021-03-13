@@ -119,7 +119,9 @@ def relative_attn_bias(rel_bias, num_heads, decode_step=None):
 
   Args:
     rel_bias: Relative bias variable of shape [num_heads, 2 * length].
+    # 2*是因为a_ij^K , a_ij^V 两套？
     num_heads: Number of attention heads.
+    # 论文里说这个positional embedding是heads之间共享的?所以这里num_heads里的东西是重复的？
     decode_step: Optional decode step, used for slicing during decoding.
 
   Returns:
@@ -150,18 +152,23 @@ def relative_attn_bias(rel_bias, num_heads, decode_step=None):
   # Tadaaa!
 
   # [heads, len_q * num_rel_pos]
+  # we linearize
+  # 这里把rel_bias 一直重复直到达到length长度
   rel_bias = tf.tile(rel_bias, [1, length])
 
   # [heads, len_q * (num_rel_pos - 1)]
+  # we slice
   num_rel_pos -= 1
   rel_bias = rel_bias[Ellipsis, :length * num_rel_pos]
 
   # [heads, len_q, num_rel_pos - 1]
   # Now every row is shifted by 1 to the right.
+  # we reshape
   rel_bias = tf.reshape(rel_bias, [num_heads, length, num_rel_pos])
 
   # [heads, len_q, len_k]
   # Slice the overlapping elements from start.
+  # we slice
   rel_bias = rel_bias[Ellipsis, num_rel_pos - length:]
   # [len_q, heads, len_k]
   rel_bias = tf.transpose(rel_bias, [1, 0, 2])
