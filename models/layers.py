@@ -192,6 +192,7 @@ class PositionEmbed(layers.Layer):
       shape.append(input_shape[-1])
       init = tf.keras.initializers.RandomNormal(stddev=shape[-1]**-0.5)
       self.embeddings.append(
+          # add_weight 是tf.keras.layers.Layer的函数，用于自定义网络层
           self.add_weight(
               name='position_embedding_%d' % i,
               shape=shape,
@@ -279,8 +280,9 @@ class DenseND(layers.Layer):
 
 class RelativeAttentionBiasND(layers.Layer):
   """Relative attention bias in nd factorizes over dimensions."""
-  # 按照https://arxiv.org/pdf/1803.02155 计算出positional embedding a_ij 
-  # 之后会像bias一样加到e_ij上，所以这里称之为bias
+  # 因为前面有positional encoding，所以这里不是PE
+  # relativeAttention是一种算法，会加上表示元素相对位置关系的relativeAttentionBias
+  # 详见论文https://arxiv.org/pdf/1803.02155
   def __init__(self, lengths, num_heads, **kwargs):
     self.num_heads = num_heads
     self.lengths = lengths
@@ -308,6 +310,7 @@ class RelativeAttentionBiasND(layers.Layer):
 
     for i, s in enumerate(self.lengths):
       # Relative attention in every dimension separately.
+      # wyw: guess i denotes index of dimension
       if s > 1:
         new_bias = att_utils.relative_attn_bias(
             self.biases[i], self.num_heads, index)
@@ -394,12 +397,6 @@ class ConditionalLayerNorm(layers.Layer):
 
 class SelfAttentionND(layers.Layer):
   """Transforms input through a N-D self-attention layer.
-
-  paper P5: context representation c in R^{MxNxD}
-  M,N represent the embedded image height and width
-  D represent dimension
-  ??so N-D here could be a row??
-
   Assume key, query and memory tensors are N-D tensors.
 
   1. Project key, query and value tensors into (N+2)-D tensors using
@@ -551,11 +548,10 @@ class SelfAttentionND(layers.Layer):
     super(SelfAttentionND, self).build(input_shape)
 
   def _apply_mask_and_bias(self, alphas):
-    # FIXME: 为啥又整个bias，单独mask不行吗？ relative_attention(None)是啥
     bias = self.relative_attention(None)
+    # 在bias上被mask掉了，相当于前面的e_ij也被mask掉了，因为mask上三角很小-1e6
     if self.mask:
       bias += self._mask
-    # FIXME: 啥意思
     expand_bias_dims = -self.attention_dim_q - 3
     if expand_bias_dims:
       bias = tf.reshape(bias, [-1] + [1] * expand_bias_dims +
@@ -608,6 +604,7 @@ class SelfAttentionND(layers.Layer):
         x = self._prepare_block_attention(x)
       else:
         x = self._prepare_full_attention(x)
+    # FIXME：为什么这里还要弄个memory？q=self.project_q(x)并没有改变x鸭...
     memory = x
     q, k, v = self.project_q(x), self.project_k(memory), self.project_v(memory)
 

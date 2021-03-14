@@ -111,9 +111,13 @@ def divide_nd_blocks(inputs, nd_block_size, collapse=False):
 
 def relative_attn_bias(rel_bias, num_heads, decode_step=None):
   """Computes attention bias based on relative positions.
-
+  本函数对应该论文
   Content-based relative position attention bias was used in:
     https://arxiv.org/pdf/1803.02155.
+  3.2节：每个a_ij对应的bias长度为clip(j-i,k)
+  所以在实施上，length_k=clip(j-i,k)
+  然后对计算完毕的rel_bias,滑动定长窗口获得每个a_ij对应的bias
+
   Non-content-based relative position attention bias was used in:
     https://arxiv.org/abs/1606.01933.
 
@@ -133,6 +137,7 @@ def relative_attn_bias(rel_bias, num_heads, decode_step=None):
   if tf.is_tensor(decode_step):
     # This is decoding so we need to select the current slice within rel_bias.
     # E.g.: len_k = 3, decode_step = 1
+    # 猜想这里用连续的整数-2，-1，0...表示位置
     # We have: rel_bias = [-2, -1, 0, 1, 2, 3]
     # We want: [-1, 0, 1]
     # We slice at len_k - decode_step - 1 = 1
@@ -150,6 +155,8 @@ def relative_attn_bias(rel_bias, num_heads, decode_step=None):
   # We reshape: [[-2, -1, 0, 1, 2], [3, -2, -1, 0, 1], [2, 3, -2, -1, 0]]
   # We slice: [[0, 1, 2], [-1, 0, 1], [-2, -1, 0]]
   # Tadaaa!
+  # 最后想要的效果是在位置-2,-1,0.....上滑动地获得定长段
+  # FIXME: 即positional embedding？不懂为什么这里要获得正在考察元素左右位置的PE
 
   # [heads, len_q * num_rel_pos]
   # we linearize
