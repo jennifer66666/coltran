@@ -64,11 +64,19 @@ class Shift(layers.Layer):
     index = [0] * len(self.resolution)
     y = x
     paddings = np.zeros((rank, 2), dtype=np.int32)
+    # paddings[D, 0] indicates how many values to add 
+    # before the contents of tensor in that dimension
+    # paddings[D, 1] indicates how many values to add 
+    # after the contents of tensor in that dimension
+    # The padded size of each dimension D of the output is:
+    # paddings[D, 0] + tensor.dim_size(D) + paddings[D, 1]
     paddings[dim, 0] = 1
     y = tf.pad(y, paddings)
 
     rem_dims = rank - 1 - len(index[:dim])
     slice_inds = [0]  + index[:dim] + [0] * rem_dims
+    # tf.slice用法详见https://www.cnblogs.com/chamie/p/11073363.html
+    # 这里做slice是为了shift(padding)完了之后还原形状
     return tf.slice(y, slice_inds, shape)
 
 
@@ -145,6 +153,8 @@ class Cache(layers.Layer):
 
     # We need to squeeze nd-axes from value before updating.
     value = tf.reshape(value, [-1] + features_shape)
+    # 对self.cache进行sparse update
+    # 即把value插入indices指定的self.cache里面的位置
     self.cache = tf.tensor_scatter_nd_update(self.cache, indices, value)
     return self.cache
 
@@ -156,8 +166,9 @@ class Masking(object):
   the current element, or we can mask in addition the present as well, i.e.,
   we can look only to the past.
   """
-
+  # 只允许看到过去和现在
   FUTURE = 'future'
+  # 或 只允许看到过去
   FUTURE_PRESENT = 'future_present'
 
 
@@ -190,6 +201,7 @@ class PositionEmbed(layers.Layer):
     for i, axis in enumerate(self.axes):
       shape = [self.max_lengths[i]] + [1] * (rank - axis - 2)
       shape.append(input_shape[-1])
+      # stddev as a scaler; default mean=0.0
       init = tf.keras.initializers.RandomNormal(stddev=shape[-1]**-0.5)
       self.embeddings.append(
           # add_weight 是tf.keras.layers.Layer的函数，用于自定义网络层
