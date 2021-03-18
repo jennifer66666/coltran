@@ -251,6 +251,8 @@ class DenseND(layers.Layer):
 
   def _glorot_uniform(self, shape, dtype=tf.float32):
     """Glorot uniform initializer."""
+    # 给出范围在[-limit,limit]之间的均匀分布
+    # 初始化利用glorot initializer
     fan_out = functools.reduce(operator.mul, self.filters)
     fan_in = functools.reduce(operator.mul, shape[:self.contract_axes])
     scale = 1. / max(1., (fan_in + fan_out) / 2.)
@@ -260,6 +262,7 @@ class DenseND(layers.Layer):
   def build(self, input_shape):
     # Infer matrix multiplication if no contract shape specified.
     self.contract_shape = input_shape[-self.contract_axes:]
+    # self.filters 表示上文中最终输出变量的最后一个维度 
     w_shape = self.contract_shape + self.filters
     self.w = self.add_weight(
         name='kernel',
@@ -280,8 +283,10 @@ class DenseND(layers.Layer):
     contract_str = 'ABCDEFGHIJKLM'[:len(self.contract_shape)]
     output_str = 'nopqrstuvwxyz'[:len(self.filters)]
     # pyformat: enable
+    # abAB,ABno ->abno即矩阵乘法
     einsum_str = '{}{},{}{}->{}{}'.format(batch_str, contract_str, contract_str,
                                           output_str, batch_str, output_str)
+    # result = input * self.w
     result = tf.einsum(einsum_str, inputs, self.w)
     if self.use_bias:
       result += self.b
@@ -371,6 +376,8 @@ class ConditionalLayerNorm(layers.Layer):
   def build(self, input_shape):
     x_shape = input_shape[0]
     height, width, features = x_shape[-3:]
+    # 注意和batch norm的区别:batch norm是基于样本的
+    # 而layer norm基于网络层和tensor
     self.layer_norm = layers.LayerNormalization(
         trainable=False, name='normalize')
 
