@@ -69,6 +69,7 @@ class ColorUpsampler(tf.keras.Model):
     return logits, {}
 
   def upsampler(self, inputs, grayscale, channel_index=None, training=True):
+    # core输出的是Lx512,shape = [B,W,H,C] 512的灰度分布在C上面
     """Upsamples the coarse inputs to per-channel logits."""
     num_channels = inputs.shape[-1]
     logits = []
@@ -76,6 +77,8 @@ class ColorUpsampler(tf.keras.Model):
     # Embed grayscale image.
     grayscale = tf.one_hot(grayscale, depth=256)
     gray_embed = self.gray_embedding(grayscale)
+    # 把矩阵中shape为1的维度去掉
+    # 指定axis的话就是把axis指定维度的1去掉，如shape=[2,1,3]->[2,3]
     gray_embed = tf.squeeze(gray_embed, axis=-2)
 
     if channel_index is not None:
@@ -83,7 +86,7 @@ class ColorUpsampler(tf.keras.Model):
 
     for channel_ind in range(num_channels):
       channel = inputs[Ellipsis, channel_ind]
-
+      # 看不懂 为啥要全部加8
       if channel_index is not None:
         # single random channel slice during training.
         # channel_index is the index of the random channel.
@@ -93,17 +96,23 @@ class ColorUpsampler(tf.keras.Model):
         channel += 8 * channel_ind
 
       channel = tf.expand_dims(channel, axis=-1)
+      # one_hot 24位的范围是[0,2^24]
+      # 猜测输出shape [B,W,H,24]
       channel = tf.one_hot(channel, depth=24)
 
       channel = self.bit_embedding(channel)
+      # 为什么D -2 的shape是1
       channel = tf.squeeze(channel, axis=-2)
-
+      # 看论文的图例，color upsampler集合第一个模块的输出和灰图输入
       channel = tf.concat((channel, gray_embed), axis=-1)
       channel = self.input_dense(channel)
-
+      # 就是一个算context的动作，也没有autoregressive的概念
       context = self.encoder(channel, training=training)
       channel_logits = self.final_dense(context)
       logits.append(channel_logits)
+    # tf.stack(axis)表示在哪个维度上stack
+    # 如 axis=-2则(N,A,B,C)->(A,B,N,C)
+    # 为什么D -2 的shape是1
     logits = tf.stack(logits, axis=-2)
     return logits
 
@@ -115,14 +124,18 @@ class ColorUpsampler(tf.keras.Model):
     logits = self.upsampler(bit_cond, gray_cond, training=False)
 
     if mode == 'argmax':
+      # 理解argman就是取logits里面最大的出来作为结果
+      # 那么后面sample就是随机取logits
       samples = tf.argmax(logits, axis=-1)
     elif mode == 'sample':
+      # 最后一维是什么？(-1维没有拿出来)
       batch_size, height, width, channels = logits.shape[:-1]
       logits = tf.reshape(logits, (batch_size*height*width*channels, -1))
+      # [:,0]是啥意思
       samples = tf.random.categorical(logits, num_samples=1,
                                       dtype=tf.int32)[:, 0]
       samples = tf.reshape(samples, (batch_size, height, width, channels))
-
+    # sample出来的结果会被拿来算loss吗？differentiable？
     samples = tf.cast(samples, dtype=tf.uint8)
     output[f'bit_up_{mode}'] = samples
     return output
